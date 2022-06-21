@@ -3,7 +3,7 @@ import yaml
 from datetime import datetime
 from yaml import load, SafeLoader, YAMLError, safe_dump
 from marshmallow_dataclass import class_schema
-from typing import Dict
+import numpy as np
 import logging
 
 from dataclasses import dataclass, field
@@ -22,16 +22,88 @@ class ContextException(Exception):
     pass
 
 
+class RateConfigurationException(Exception):
+    pass
+
+
+@dataclass
+class BucketValue:
+    min: float
+    label: str
+
+
+@dataclass
+class SuggestionLevel(Enum):
+    WARNING = 'Warning'
+    ALERTING = 'Alert'
+
+
+@dataclass
+class BucketedStateConfig:
+    buckets: List[BucketValue]
+
+    def __post_init__(self):
+        self.series = self._bucket_series()
+        self.labels = self._bucket_labels()
+
+    def _bucket_series(self) -> List[float]:
+        series = []
+        for idx, bucket_val in enumerate(self.buckets):
+            series.append(bucket_val.min)
+            if idx != 0:
+                if bucket_val.min <= self.buckets[idx-1].min:
+                    raise RateConfigurationException("Buckets must be listed in order")
+        # Set infinity as the max
+        series.append(np.Infinity)
+        return series
+
+    def _bucket_labels(self) -> List[str]:
+        return [b.label for b in self.buckets]
+
+
+@dataclass
+class QuantileValue:
+    minValue: float
+    minQuantile: float
+    label: str
+
+
+@dataclass
+class QuantileStateConfig:
+    quantiles: List[QuantileValue]
+
+    def get_quantiles_for_level(self, level: SuggestionLevel) -> QuantileValue:
+        for quantile in self.quantiles:
+            if quantile.label == level:
+                return quantile
+
+
 @dataclass
 class IOTFetchConfig:
     feedKey: str
     fieldDescriptor: str
+    isTotalizer: Optional[bool] = False
+
+
+@dataclass
+class ReportUnits(Enum):
+    mwh = 'mwh'
+    kwh = 'kwh'
+
+
+@dataclass
+class ReportSendMode(Enum):
+    onSchedule = 'onSchedule'
+    whenAvailable = 'whenAvailable'
 
 
 @dataclass
 class ReportConfig:
     type: str
+    units: ReportUnits
+    sendMode: ReportSendMode
     subscribers: List[str]
+    config: Optional[Dict[str, Any]]
 
 
 @dataclass
@@ -66,7 +138,8 @@ class RateFetchConfig:
 
 @dataclass
 class RateConfig:
-    thresholds: RateAlertConfig
+    quantileStates: Optional[QuantileStateConfig]
+    bucketedStates: Optional[BucketedStateConfig]
     fetchInfo: List[RateFetchConfig]
 
     def get_feed_for_type(self, type: str) -> RateFetchConfig:
@@ -121,10 +194,23 @@ class RefrigerationConfig:
             if evap.slug == slug:
                 return evap
 
+    def get_evaporators_for_facility_attribute(self, attribute_key: str, attribute_value: str) -> List[EvaporatorConfig]:
+        evap_configs = []
+        for evap in self.evaporators:
+            if evap.facilityAttributes.get(attribute_key) == attribute_value:
+                evap_configs.append(evap)
+        return evap_configs
+
     def get_compressor_with_slug(self, slug: str) -> CompressorConfig:
         for comp in self.compressors:
             if comp.slug == slug:
                 return comp
+
+
+@dataclass
+class Location:
+    lat: str
+    long: str
 
 
 @dataclass
@@ -133,12 +219,13 @@ class FacilityConfig:
     slug: str
     id: int
     timezone: str
+    location: Optional[Location]
     reports: Optional[List[ReportConfig]]
     suggestions: Optional[List[SuggestionConfig]]
     components: Optional[List[ComponentConfig]]
     rates: Optional[RateConfig] = None
     refrigeration: Optional[RefrigerationConfig] = None
-    mainServices: Optional[List[ComponentConfig]] = None
+    mainServices: Optional[List[ComponentConfig]] = field(default_factory=list)
 
     def get_suggestions_project_by_id(self, project_id: str):
         for suggestion in self.suggestions:

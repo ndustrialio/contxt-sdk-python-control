@@ -56,7 +56,7 @@ class IotNionicHelper(BaseGraphService):
             field_alias = field.label if field.alias is None else field.alias.replace('-', '_')
             field_aliases.append(field_alias)
             metric_data = op.metric_data(label=field.label, source_id=field.sourceId, window='1min',
-                                         order_by=[schema.MetricDataOrderBy.TIME_DESC], first=1,
+                                         order_by=schema.MetricDataOrderBy.TIME_DESC, first=1,
                                          to=str(datetime.utcnow()), from_=str(datetime.utcnow() - timedelta(days=1)),
                                          __alias__=field_alias)
             metric_data.nodes().time()
@@ -87,12 +87,12 @@ class IotNionicHelper(BaseGraphService):
             if req.window is not MetricWindow.RAW:
                 metric_data = op.metric_data(label=req.field.label, source_id=req.field.sourceId, window=req.window.value,
                                              aggregation=req.aggregation,
-                                             order_by=[schema.MetricDataOrderBy.TIME_ASC],
+                                             order_by=schema.MetricDataOrderBy.TIME_ASC,
                                              to=str(req.endTime), from_=str(req.startTime),
                                              __alias__=alias)
             else:
                 metric_data = op.metric_data(label=req.field.label, source_id=req.field.sourceId,
-                                             order_by=[schema.MetricDataOrderBy.TIME_ASC],
+                                             order_by=schema.MetricDataOrderBy.TIME_ASC,
                                              to=str(req.endTime), from_=str(req.startTime),
                                              __alias__=alias)
             metric_data.nodes().time()
@@ -116,7 +116,7 @@ class IotNionicHelper(BaseGraphService):
         return result_data
 
     def get_iot_data(self, field: MetricField, start_time: datetime, end_time: datetime,
-                     window: MetricWindow = MetricWindow.MINUTELY, order_by=[schema.MetricDataOrderBy.TIME_ASC],
+                     window: MetricWindow = MetricWindow.MINUTELY, order_by=schema.MetricDataOrderBy.TIME_ASC,
                      aggregation: schema.MetricDataAggregationMethod = 'AVG'
                      ) -> schema.MetricData:
         op = Operation(schema.Query)
@@ -132,7 +132,7 @@ class IotNionicHelper(BaseGraphService):
 
         # page info
         metric_data.page_info().has_next_page()
-        print(op)
+
         data = self.run(op)
 
         return (op + data).metric_data
@@ -154,7 +154,7 @@ class IotNionicHelper(BaseGraphService):
         return (op + data).facility.metric_data
 
     def get_iot_data_series(self, field: MetricField, start_time: datetime, end_time: datetime,
-                               window: MetricWindow = MetricWindow.MINUTELY, order_by=[schema.MetricDataOrderBy.TIME_ASC],
+                               window: MetricWindow = MetricWindow.MINUTELY, order_by=schema.MetricDataOrderBy.TIME_ASC,
                                aggregation: str = 'AVG'
                                ) -> pd.Series:
 
