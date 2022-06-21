@@ -1,13 +1,10 @@
-import pdb
 from dataclasses import dataclass, field
 from datetime import datetime, date, time, timedelta
-from json import loads
 from typing import ClassVar, Optional, List
 
 import pandas as pd
 
 from . import ApiField, ApiObject, Parsers
-from contxt.utils.serializer import Serializer
 
 
 class RTPRateException(Exception):
