@@ -226,6 +226,24 @@ class ControlService(BaseGraphService):
 
         return edge_control_events
 
+    def send_proposal_reviewer_notification(self, proposal_id: str, message: str):
+        op = Operation(schema.Mutation)
+
+        notification_input = schema.ProposalReviewerNotificationInput()
+        notification_input.proposal_id = proposal_id
+        notification_input.message = message
+
+        notification = op.send_proposal_reviewer_notification(input=notification_input)
+
+        notification.event_proposal.id()
+
+        data = self._get_endpoint()(op)
+        if 'errors' in data:
+            raise Exception(data['errors'][0]['message'])
+
+        event = (op + data).send_proposal_reviewer_notification
+        return event
+
     def transition_event(self, control_event_id: str, transition_event: str, message: str = None):
         op = Operation(schema.Mutation)
 
@@ -740,3 +758,51 @@ class ControlService(BaseGraphService):
         orgs = (op + data).organizations
 
         return orgs.nodes
+
+    def enroll_facility(self, facility_id: int, project_id: str):
+        query = """
+            mutation addFacilityProject($projectId: String!, $facilityId: Int!) {
+              createFacilityProject(input: {
+                facilityProject: {
+                  projectId: $projectId,
+                  facilityId: $facilityId,
+                  enrollmentStatus: "ENROLLED"
+                }
+              }) {
+                facilityProject {
+                  id
+                }
+              }
+            }
+        """
+
+        return self.run_query(query, {'projectId': project_id,
+                                      'facilityId': facility_id})
+
+    def create_component(self, label: str, slug: str, description: str, facility_id: int, controlled_by_edge_client_id: str = None) -> str:
+        query = """
+            mutation createComponent($label: String!, $slug: String!, $description: String!, $facilityId: Int!, $controllingEdgeNode: String) {
+              createControllableComponent(input: {
+                controllableComponent: {
+                  controlledByEdgeNodeClientId: $controllingEdgeNode,
+                  label: $label,
+                  slug: $slug,
+                  description: $description,
+                  facilityId: $facilityId
+                }
+              }) {
+                controllableComponent {
+                  id
+                }
+              }
+            }
+        """
+
+        data = self.run_query(query, {'label': label,
+                                      'slug': slug,
+                                      'description': description,
+                                      'facilityId': facility_id,
+                                      'controllingEdgeNode': controlled_by_edge_client_id})
+
+        return data['createControllableComponent']['controllableComponent']['id']
+

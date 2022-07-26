@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, ForwardRef, List, Dict, Any
 
+from contxt.models.iot import MetricField
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(format='[%(module)s %(levelname)s:%(asctime)s] %(message)s', level=logging.INFO)
 
@@ -84,6 +86,10 @@ class IOTFetchConfig:
     fieldDescriptor: str
     isTotalizer: Optional[bool] = False
 
+    def to_metric_field(self):
+        return MetricField(label=self.fieldDescriptor,
+                           sourceId=self.feedKey)
+
 
 @dataclass
 class ReportUnits(Enum):
@@ -117,8 +123,8 @@ class SuggestionConfig:
 class ComponentConfig:
     name: str
     slug: str
-    iotInfo: Optional[IOTFetchConfig]
-    id: Optional[str]
+    iotInfo: Optional[IOTFetchConfig] = None
+    id: Optional[str] = None
 
 
 @dataclass
@@ -219,10 +225,12 @@ class FacilityConfig:
     slug: str
     id: int
     timezone: str
-    location: Optional[Location]
-    reports: Optional[List[ReportConfig]]
-    suggestions: Optional[List[SuggestionConfig]]
-    components: Optional[List[ComponentConfig]]
+    city: Optional[str] = None
+    state: Optional[str] = None
+    location: Optional[Location] = None
+    reports: Optional[List[ReportConfig]] = None
+    suggestions: Optional[List[SuggestionConfig]] = None
+    components: Optional[List[ComponentConfig]] = None
     rates: Optional[RateConfig] = None
     refrigeration: Optional[RefrigerationConfig] = None
     mainServices: Optional[List[ComponentConfig]] = field(default_factory=list)
@@ -257,7 +265,7 @@ class ReportLoadConfig:
 @dataclass
 class Config:
     facilityConfigs: List[FacilityConfig]
-    reportConfigs: Optional[List[ReportLoadConfig]]
+    reportConfigs: Optional[List[ReportLoadConfig]] = field(default_factory=list)
 
     def get_config_by_facility_id(self, facility_id: int) -> FacilityConfig:
         for facility in self.facilityConfigs:
@@ -403,7 +411,10 @@ def write_config_class_to_file(file: str, obj, config_class):
     with open(file, 'w') as stream:
         try:
             config_schema = class_schema(config_class)()
-            result = config_schema.dump(obj)
+            if isinstance(obj, list):
+                result = [config_schema.dump(o) for o in obj]
+            else:
+                result = config_schema.dump(obj)
             safe_dump(result, stream)
         except YAMLError as e:
             logger.error(e)

@@ -25,6 +25,11 @@ class NionicService(BaseGraphService):
 
         query.id()
         query.name()
+        query.latitude()
+        query.longitude()
+        query.timezone()
+        query.city()
+        query.state()
 
         data = self.run(op)
 
