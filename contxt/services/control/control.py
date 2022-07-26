@@ -1,18 +1,21 @@
-from sgqlc.operation import Operation
-from datetime import datetime
-import pytz
 import json
-from typing import List, Dict, AnyStr, Any, Optional
+from datetime import datetime
+from typing import Any, AnyStr, Dict, List, Optional
 
-from contxt.utils.config import ContxtEnvironmentConfig
+import pytz
+from sgqlc.operation import Operation
+
 from contxt.services.base_graph_service import BaseGraphService, SchemaMissingException
+from contxt.utils.config import ContxtEnvironmentConfig
 
 try:
     import contxt.schemas.foundry_graph.foundry_graph_schema as schema
     from contxt.schemas.foundry_graph.foundry_graph_schema import ComponentToControlInputRecordInput
 except ImportError:
-    raise SchemaMissingException('[ERROR] Schema is not generated for GraphQL -- run `contxt init` to '
-                                 'initialize then re-run the command')
+    raise SchemaMissingException(
+        "[ERROR] Schema is not generated for GraphQL -- run `contxt init` to "
+        "initialize then re-run the command"
+    )
 
 from contxt.models.control import Suggestion
 
@@ -20,8 +23,10 @@ from contxt.models.control import Suggestion
 def include_proposals_with_object(obj, include_only_active: bool = True, project_id: str = None):
     filters = {}
     if project_id:
-        filters['project_id'] = project_id
-    proposals = obj.event_proposals(condition=filters, order_by=[schema.EventProposalsOrderBy.START_TIME_ASC]).nodes()
+        filters["project_id"] = project_id
+    proposals = obj.event_proposals(
+        condition=filters, order_by=[schema.EventProposalsOrderBy.START_TIME_ASC]
+    ).nodes()
     proposals.id()
     proposals.start_time()
     proposals.end_time()
@@ -29,34 +34,45 @@ def include_proposals_with_object(obj, include_only_active: bool = True, project
 
 
 class ControlService(BaseGraphService):
-
     def __init__(self, contxt_env: ContxtEnvironmentConfig):
         super().__init__(contxt_env)
 
-    def create_definition_from_json_file(self, json_file: str, slug: str, project_id: str, label: str,
-                                         description: str) -> schema.StateDefinition:
-        print(f'Opening json file at {json_file}')
-        with open(json_file, 'r') as f:
+    def create_definition_from_json_file(
+        self, json_file: str, slug: str, project_id: str, label: str, description: str
+    ) -> schema.StateDefinition:
+        print(f"Opening json file at {json_file}")
+        with open(json_file, "r") as f:
             definition_data = json.load(f)
 
-            return self.create_definition(json_obj=definition_data, slug=slug, project_id=project_id, label=label,
-                                          description=description)
+            return self.create_definition(
+                json_obj=definition_data,
+                slug=slug,
+                project_id=project_id,
+                label=label,
+                description=description,
+            )
 
-    def get_event_proposals(self, facility_id: int, project_id: str = None):
+    def get_event_proposals(self, facility_id: int, project_id: str = None, filters: dict = None):
         op = Operation(schema.Query)
 
-        filters = {}
+        if filters is None:
+            filters = {}
+
         if facility_id:
-            filters['facility_id'] = facility_id
+            filters["facility_id"] = {"equalTo": facility_id}
 
         if project_id:
-            filters['project_id'] = project_id
+            filters["project_id"] = {"equalTo": project_id}
 
         if len(filters) > 0:
-            proposals = op.event_proposals(condition=filters,
-                                           order_by=[schema.EventProposalsOrderBy.START_TIME_ASC]).nodes()
+            proposals = op.event_proposals(
+                filter=filters,
+                order_by=[schema.EventProposalsOrderBy.START_TIME_ASC],
+            ).nodes()
         else:
-            proposals = op.event_proposals(order_by=[schema.EventProposalsOrderBy.START_TIME_ASC]).nodes()
+            proposals = op.event_proposals(
+                order_by=[schema.EventProposalsOrderBy.START_TIME_ASC]
+            ).nodes()
 
         proposals.id()
         proposals.facility().name()
@@ -80,15 +96,17 @@ class ControlService(BaseGraphService):
         proposals.event_proposal_metrics().nodes().controllable_component().slug()
 
         data = self._get_endpoint()(op)
-        if 'errors' in data:
+        if "errors" in data:
             print(data)
-            raise Exception(data['errors'][0]['message'])
+            raise Exception(data["errors"][0]["message"])
 
         proposals = (op + data).event_proposals
 
         return proposals.nodes
 
-    def get_proposal_detail(self, event_proposal_id: str, include_event_log: bool = True, include_metrics: bool = True):
+    def get_proposal_detail(
+        self, event_proposal_id: str, include_event_log: bool = True, include_metrics: bool = True
+    ):
         op = Operation(schema.Query)
 
         event_proposal = op.event_proposal(id=event_proposal_id)
@@ -130,7 +148,8 @@ class ControlService(BaseGraphService):
         # Include events
         if include_event_log:
             logs = event_proposal.event_proposal_logs(
-                order_by=[schema.EventProposalLogsOrderBy.EVENT_TIME_ASC]).nodes()
+                order_by=[schema.EventProposalLogsOrderBy.EVENT_TIME_ASC]
+            ).nodes()
             logs.event_time()
             logs.event_type()
             logs.label()
@@ -145,16 +164,19 @@ class ControlService(BaseGraphService):
 
         return event_proposal
 
-    def get_latest_proposal_for_component(self, controllable_component_id: str, project_id: str = None
-                                          ) -> Optional[schema.EventProposal]:
-        component_with_proposals = self.get_proposals_for_component(controllable_component_id, limit=1,
-                                                                    project_id=project_id)
+    def get_latest_proposal_for_component(
+        self, controllable_component_id: str, project_id: str = None
+    ) -> Optional[schema.EventProposal]:
+        component_with_proposals = self.get_proposals_for_component(
+            controllable_component_id, limit=1, project_id=project_id
+        )
 
         if len(component_with_proposals.event_proposals.nodes):
             return component_with_proposals.event_proposals.nodes[0]
 
-    def get_proposals_for_component(self, controllable_component_id: str, limit=None, project_id: str = None
-                                    ) -> schema.ControllableComponent:
+    def get_proposals_for_component(
+        self, controllable_component_id: str, limit=None, project_id: str = None
+    ) -> schema.ControllableComponent:
         op = Operation(schema.Query)
 
         controllable_component = op.controllable_component(id=controllable_component_id)
@@ -163,10 +185,11 @@ class ControlService(BaseGraphService):
 
         filters = {}
         if project_id:
-            filters['project_id'] = project_id
+            filters["project_id"] = project_id
 
         proposals = controllable_component.event_proposals(
-            condition=filters, order_by=[schema.EventProposalsOrderBy.START_TIME_DESC], first=limit).nodes()
+            condition=filters, order_by=[schema.EventProposalsOrderBy.START_TIME_DESC], first=limit
+        ).nodes()
         proposals.id()
         proposals.project_id()
         proposals.current_state()
@@ -190,7 +213,8 @@ class ControlService(BaseGraphService):
 
         # Audit Logs
         logs = control_event.control_event_logs(
-            order_by=[schema.ControlEventLogsOrderBy.EVENT_TIME_ASC]).nodes()
+            order_by=[schema.ControlEventLogsOrderBy.EVENT_TIME_ASC]
+        ).nodes()
         logs.event_time()
         logs.event_type()
         logs.label()
@@ -258,8 +282,8 @@ class ControlService(BaseGraphService):
         transition.control_event.state_machine().current_state()
 
         data = self._get_endpoint()(op)
-        if 'errors' in data:
-            raise Exception(data['errors'][0]['message'])
+        if "errors" in data:
+            raise Exception(data["errors"][0]["message"])
 
         event = (op + data).transition_control_event
         return event
@@ -285,8 +309,9 @@ class ControlService(BaseGraphService):
 
         return definitions
 
-    def create_definition(self, json_obj, slug: str, project_id: str, description: str, label: str
-                          ) -> schema.StateDefinition:
+    def create_definition(
+        self, json_obj, slug: str, project_id: str, description: str, label: str
+    ) -> schema.StateDefinition:
         op = Operation(schema.Mutation)
 
         def_input = schema.StateDefinitionInput()
@@ -309,8 +334,14 @@ class ControlService(BaseGraphService):
 
         return (op + data).create_state_definition.state_definition
 
-    def add_historic_event(self, facility_id: int, project_id: str, start_time: datetime,
-                           end_time: datetime, components: List[schema.ControllableComponent]):
+    def add_historic_event(
+        self,
+        facility_id: int,
+        project_id: str,
+        start_time: datetime,
+        end_time: datetime,
+        components: List[schema.ControllableComponent],
+    ):
 
         op = Operation(schema.Mutation)
 
@@ -328,9 +359,9 @@ class ControlService(BaseGraphService):
         propose.event_proposal.id()
 
         data = self._get_endpoint()(op)
-        if 'errors' in data:
+        if "errors" in data:
             print(data)
-            raise Exception(data['errors'][0]['message'])
+            raise Exception(data["errors"][0]["message"])
 
         event = (op + data).add_historic_event.event_proposal
         return event
@@ -340,20 +371,24 @@ class ControlService(BaseGraphService):
         inputs = []
         for component in suggestion.components:
             inputs.append(
-                ComponentToControlInputRecordInput(controllable_component_id=component.id,
-                                                   state_definition_slug=component.state_definition_slug)
+                ComponentToControlInputRecordInput(
+                    controllable_component_id=component.id,
+                    state_definition_slug=component.state_definition_slug,
+                )
             )
 
-        return self.propose_event(summary=suggestion.summary,
-                                  facility_id=suggestion.facility_id,
-                                  start_time=suggestion.start_time,
-                                  end_time=suggestion.end_time,
-                                  components=inputs,
-                                  project_id=suggestion.project_id,
-                                  metadata=suggestion.metadata,
-                                  control_start_deadline_time=suggestion.control_start_deadline_time,
-                                  approval_deadline_time=suggestion.approval_deadline_time,
-                                  start_control_upon_approval=suggestion.start_control_upon_approval)
+        return self.propose_event(
+            summary=suggestion.summary,
+            facility_id=suggestion.facility_id,
+            start_time=suggestion.start_time,
+            end_time=suggestion.end_time,
+            components=inputs,
+            project_id=suggestion.project_id,
+            metadata=suggestion.metadata,
+            control_start_deadline_time=suggestion.control_start_deadline_time,
+            approval_deadline_time=suggestion.approval_deadline_time,
+            start_control_upon_approval=suggestion.start_control_upon_approval,
+        )
 
     def adjust_proposal_end(self, proposal_id: str, new_end_time: datetime) -> schema.EventProposal:
         op = Operation(schema.Mutation)
@@ -394,11 +429,19 @@ class ControlService(BaseGraphService):
         proposal = (op + data).update_proposal_metadata.event_proposal
         return proposal
 
-    def propose_event(self, facility_id: int, project_id: str, start_time: datetime,
-                      end_time: datetime, components: List[ComponentToControlInputRecordInput],
-                      summary: str, control_start_deadline_time: Optional[datetime] = None,
-                      approval_deadline_time: Optional[datetime] = None, metadata: Dict[AnyStr, Any] = None,
-                      start_control_upon_approval: Optional[bool] = None) -> schema.EventProposal:
+    def propose_event(
+        self,
+        facility_id: int,
+        project_id: str,
+        start_time: datetime,
+        end_time: datetime,
+        components: List[ComponentToControlInputRecordInput],
+        summary: str,
+        control_start_deadline_time: Optional[datetime] = None,
+        approval_deadline_time: Optional[datetime] = None,
+        metadata: Dict[AnyStr, Any] = None,
+        start_control_upon_approval: Optional[bool] = None,
+    ) -> schema.EventProposal:
 
         op = Operation(schema.Mutation)
 
@@ -416,8 +459,9 @@ class ControlService(BaseGraphService):
         event_proposal.summary = summary
         event_proposal.metadata = json.dumps(metadata)
 
-        proposal = schema.ProposeEventInput(proposed_event=event_proposal,
-                                            components_to_control=components)
+        proposal = schema.ProposeEventInput(
+            proposed_event=event_proposal, components_to_control=components
+        )
 
         propose = op.propose_event(input=proposal)
 
@@ -427,16 +471,18 @@ class ControlService(BaseGraphService):
         event = (op + data).propose_event.event_proposal
         return event
 
-    def approve_proposal(self, proposal_id: str, components: List[ComponentToControlInputRecordInput]
-                         ) -> schema.EventProposal:
+    def approve_proposal(
+        self, proposal_id: str, components: List[ComponentToControlInputRecordInput]
+    ) -> schema.EventProposal:
 
         op = Operation(schema.Mutation)
 
         approved_proposal = schema.EventApprovalInputRecordInput()
         approved_proposal.id = proposal_id
 
-        approval = schema.ApproveProposalInput(approved_proposal=approved_proposal,
-                                               approved_components=components)
+        approval = schema.ApproveProposalInput(
+            approved_proposal=approved_proposal, approved_components=components
+        )
 
         approve = op.approve_proposal(input=approval)
 
@@ -448,9 +494,13 @@ class ControlService(BaseGraphService):
         event = (op + data).approve_proposal.event_proposal
         return event
 
-    def add_savings_for_component_control_event(self, component: schema.ControllableComponent,
-                                                event_proposal: schema.EventProposal, success_metric_id: str,
-                                                projected_savings_amount: float):
+    def add_savings_for_component_control_event(
+        self,
+        component: schema.ControllableComponent,
+        event_proposal: schema.EventProposal,
+        success_metric_id: str,
+        projected_savings_amount: float,
+    ):
         op = Operation(schema.Mutation)
 
         input = schema.CreateEventProposalMetricInput()
@@ -468,16 +518,16 @@ class ControlService(BaseGraphService):
 
         data = self._get_endpoint()(op)
 
-        if 'errors' in data:
+        if "errors" in data:
             print(data)
-            raise Exception(data['errors'][0]['message'])
+            raise Exception(data["errors"][0]["message"])
 
         metric = (op + data).create_event_proposal_metric
         return metric
 
-    def add_actual_savings_for_component_control_event(self, success_metric_id: str,
-                                                       actual_savings_amount: float,
-                                                       metadata: str):
+    def add_actual_savings_for_component_control_event(
+        self, success_metric_id: str, actual_savings_amount: float, metadata: str
+    ):
         op = Operation(schema.Mutation)
 
         update = schema.UpdateEventProposalMetricInput()
@@ -495,9 +545,9 @@ class ControlService(BaseGraphService):
 
         data = self._get_endpoint()(op)
 
-        if 'errors' in data:
+        if "errors" in data:
             print(data)
-            raise Exception(data['errors'][0]['message'])
+            raise Exception(data["errors"][0]["message"])
 
         metric = (op + data).update_event_proposal_metric
         return metric
@@ -520,9 +570,9 @@ class ControlService(BaseGraphService):
         post_create.facility.organization_id()
 
         data = self._get_endpoint()(op)
-        if 'errors' in data:
+        if "errors" in data:
             print(data)
-            raise Exception(data['errors'][0]['message'])
+            raise Exception(data["errors"][0]["message"])
 
         facility = (op + data).create_facility
         return facility
@@ -541,29 +591,37 @@ class ControlService(BaseGraphService):
         update_controllable.controllable_component.is_schedulable()
 
         data = self._get_endpoint()(op)
-        if 'errors' in data:
+        if "errors" in data:
             print(data)
-            raise Exception(data['errors'][0]['message'])
+            raise Exception(data["errors"][0]["message"])
 
         component = (op + data).update_controllable_component
         return component
 
-    def get_controllable_by_slug(self, facility_id: int, component_slug: str) -> Optional[schema.ControllableComponent]:
-        components = self.get_controllables_for_facility(facility_id=facility_id, component_slug=component_slug,
-                                                         include_events=False)
+    def get_controllable_by_slug(
+        self, facility_id: int, component_slug: str
+    ) -> Optional[schema.ControllableComponent]:
+        components = self.get_controllables_for_facility(
+            facility_id=facility_id, component_slug=component_slug, include_events=False
+        )
 
         if len(components):
             return components[0]
 
-    def get_controllables_for_facility(self, facility_id: int, component_slug: str = None,
-                                       include_events: bool = True, project_id: str = None):
+    def get_controllables_for_facility(
+        self,
+        facility_id: int,
+        component_slug: str = None,
+        include_events: bool = True,
+        project_id: str = None,
+    ):
         op = Operation(schema.Query)
 
         filters = {}
         if facility_id:
-            filters['facility_id'] = facility_id
+            filters["facility_id"] = facility_id
         if component_slug:
-            filters['slug'] = component_slug
+            filters["slug"] = component_slug
 
         if len(filters) > 0:
             components = op.controllable_components(condition=filters)
@@ -584,8 +642,13 @@ class ControlService(BaseGraphService):
 
         return components.nodes
 
-    def get_project_definition(self, project_id: str, metric_name: str = None,
-                               include_events: bool = True, include_only_enrolled_facilities: bool = True):
+    def get_project_definition(
+        self,
+        project_id: str,
+        metric_name: str = None,
+        include_events: bool = True,
+        include_only_enrolled_facilities: bool = True,
+    ):
         op = Operation(schema.Query)
 
         project = op.project(id=project_id)
@@ -595,7 +658,7 @@ class ControlService(BaseGraphService):
         project.name()
 
         if metric_name:
-            metrics = project.project_success_metrics(condition={'name': metric_name}).nodes()
+            metrics = project.project_success_metrics(condition={"name": metric_name}).nodes()
         else:
             metrics = project.project_success_metrics().nodes()
 
@@ -609,7 +672,8 @@ class ControlService(BaseGraphService):
 
         if include_only_enrolled_facilities:
             facility_projects = project.facility_projects(
-                condition={'enrollmentStatus': 'ENROLLED'}).nodes()
+                condition={"enrollmentStatus": "ENROLLED"}
+            ).nodes()
         else:
             facility_projects = project.facility_projects().nodes()
         facility_projects.enrollment_status()
@@ -637,7 +701,10 @@ class ControlService(BaseGraphService):
 
         return projects.nodes
 
-    def get_facilities(self, include_events: bool = True,):
+    def get_facilities(
+        self,
+        include_events: bool = True,
+    ):
         op = Operation(schema.Query)
 
         facilities = op.facilities().nodes()
@@ -672,7 +739,7 @@ class ControlService(BaseGraphService):
 
         filters = {}
         if facility_id:
-            filters['facility_id'] = facility_id
+            filters["facility_id"] = facility_id
 
         if len(filters) > 0:
             edge_nodes = op.edge_nodes(condition=filters).nodes()
