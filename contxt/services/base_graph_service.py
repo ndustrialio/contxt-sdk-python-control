@@ -1,6 +1,7 @@
 import os.path
 from os import path
 import json
+from typing import Optional
 from sgqlc.operation import Operation
 from sgqlc.endpoint.http import HTTPEndpoint
 from sgqlc.introspection import query as introspection_query, variables
@@ -70,6 +71,15 @@ class BaseGraphService(ConfiguredGraphApi):
     def run(self, op: Operation):
 
         data = self._get_endpoint()(op)
+
+        if 'errors' in data:
+            print(data)
+            raise Exception(data['errors'][0]['message'])
+
+        return data
+
+    def run_query(self, query: str, variables: Optional[dict] = None):
+        data = self._get_endpoint()(query, variables)
 
         if 'errors' in data:
             print(data)
