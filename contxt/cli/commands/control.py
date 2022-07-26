@@ -154,6 +154,21 @@ def token():
     print(control.get_auth_token())
 
 
+# Notification functions
+@click.group()
+def notify() -> None:
+    """Notification Functions"""
+
+@notify.command()
+@click.option('--proposal-id', type=str, prompt=True)
+@click.option('--message', type=str, prompt=True)
+def reviewers(proposal_id: str, message: str):
+    get_control_service().send_proposal_reviewer_notification(
+        proposal_id=proposal_id,
+        message=message
+    )
+
+
 # Create functions
 @click.group()
 def create() -> None:
@@ -227,5 +242,6 @@ def cli() -> None:
 control.add_command(create)
 control.add_command(get)
 control.add_command(generate)
+control.add_command(notify)
 control.add_command(schema)
 control.add_command(set_schedulable)
