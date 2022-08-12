@@ -14,6 +14,7 @@ from contxt.utils.controlsim.models import SimulationConfigs, DefinitionConfig, 
 
 LEAD_BUFFER_TIME_MINUTES = 3
 
+
 class SimulatorException(Exception):
     pass
 
@@ -39,12 +40,20 @@ class FrameworkState:
 
 class GeneralControlEventSimulator:
 
-    def __init__(self, control_event, config: DefinitionConfig, control: ControlService, component_slug: str):
+    def __init__(self,
+                 control_event,
+                 config: DefinitionConfig,
+                 control: ControlService,
+                 component_slug: str,
+                 event_hooks: dict[str, classmethod]
+                 ):
         self.control_event = control_event
         self.end_time : datetime = parser.parse(self.control_event.end_time)
         self.config = config
         self.control = control
         self.my_component = component_slug
+        self.event_hooks = event_hooks
+        print(f'Registered event hooks: {self.event_hooks}')
         self.next_transition_time: Optional[datetime] = None
         self.current_state: str = None
 
@@ -62,6 +71,8 @@ class GeneralControlEventSimulator:
         # check to see if our end time changed
         if self.end_time != framework_state.end_time:
             print(f'End time from the API changed...making change on our side')
+            self.end_time = framework_state.end_time
+
 
         # if we're in a state of waiting for external input, we'll grab the state from the framework
         if not state_config.controllable:
@@ -93,6 +104,12 @@ class GeneralControlEventSimulator:
                 print(f'[{self.my_component}] -- Setting timer to send {state_config.onSuccess} at '
                       f'{self.next_transition_time}')
 
+        # call any hooks we may have registered
+        if self.current_state in self.event_hooks:
+            func = self.event_hooks.get(self.current_state)
+            # Call the function
+            func(framework_state, self.control_event)
+
     def transition(self, framework_state: FrameworkState):
         state_config = self.config.get_state_config(self.current_state)
         event = state_config.onSuccess
@@ -109,10 +126,15 @@ class GeneralControlEventSimulator:
 
 class Simulator:
 
-    def __init__(self, definitions: List[str], simulator_config_filename: str):
+    def __init__(self,
+                 definitions: List[str],
+                 simulator_config_filename: str,
+                 event_hooks: dict[str, classmethod] = None
+                 ):
         self.simulation_config: SimulationConfigs = load_config_class_from_file(simulator_config_filename, SimulationConfigs)
         self.control_service = get_control_service()
         self.definitions = definitions
+        self.event_hooks = event_hooks if not None else {}
         self.framework_reported_current_states : Dict[str, FrameworkState] = {}
         self.events_to_monitor: dict[str, GeneralControlEventSimulator] = {}
 
@@ -157,7 +179,8 @@ class Simulator:
                             GeneralControlEventSimulator(config=definition_config,
                                                          control=self.control_service,
                                                          component_slug=event.componentslug,
-                                                         control_event=event.controlevent)
+                                                         control_event=event.controlevent,
+                                                         event_hooks=self.event_hooks)
                     else:
                         current_framework_state = self.framework_reported_current_states[event.componentslug]
                         if current_framework_state.control_event_id != event.controlevent.id:
