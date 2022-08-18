@@ -129,7 +129,8 @@ class Simulator:
     def __init__(self,
                  definitions: List[str],
                  simulator_config_filename: str,
-                 event_hooks: dict[str, classmethod] = None
+                 event_hooks: dict[str, classmethod] = None,
+                 components_to_simulate: List[str] = None
                  ):
         self.simulation_config: SimulationConfigs = load_config_class_from_file(simulator_config_filename, SimulationConfigs)
         self.control_service = get_control_service()
@@ -137,6 +138,7 @@ class Simulator:
         self.event_hooks = event_hooks if not None else {}
         self.framework_reported_current_states : Dict[str, FrameworkState] = {}
         self.events_to_monitor: dict[str, GeneralControlEventSimulator] = {}
+        self.components_to_simulate = components_to_simulate
 
     # Thread for querying the controls api every 5 seconds and keeping our worker threads up to date
     def run(self):
@@ -206,6 +208,14 @@ class Simulator:
                 # delete the events we don't need anymore
                 for component in events_to_delete:
                     del self.events_to_monitor[component]
+
+                if self.components_to_simulate:
+                    for slug in self.components_to_simulate:
+                        if slug not in self.events_to_monitor:
+                            tick_func = self.event_hooks.get('_idle_tick')
+                            if tick_func:
+                                # call the hook for the tick
+                                tick_func(slug)
 
             except KeyboardInterrupt:
                 break
