@@ -244,6 +244,10 @@ class ControlService(BaseGraphService):
         control_event.state_machine().state_definition()
         control_event.state_machine().current_state()
 
+        component = control_event.controllable_component()
+        component.facility_id()
+        component.slug()
+
         data = self.run(op)
 
         edge_control_events = (op + data).edge_control_events

@@ -55,9 +55,9 @@ class BaseGraphService(ConfiguredGraphApi):
             os.makedirs(schema_dir)
 
         json_schema_filepath = path.abspath(path.join(schema_dir, f"{schema_name}_schema.json"))
-        with open(json_schema_filepath, 'w') as f:
+        with open(json_schema_filepath, 'w', encoding='utf8') as f:
             print(f'Writing schema to {json_schema_filepath}')
-            json.dump(data, f, sort_keys=True, indent=2, default=str)
+            json.dump(data, f, sort_keys=True, indent=2, default=str, ensure_ascii=False)
 
         python_schema_filepath = path.abspath(path.join(schema_dir, f'{schema_name}_schema.py'))
         print('Generating code for schema')

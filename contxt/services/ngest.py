@@ -1,6 +1,6 @@
 from copy import deepcopy
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import Dict, List, Any
 
 from ..utils import is_datetime_aware, make_logger
 from ..utils.config import ContxtEnvironmentConfig
@@ -43,7 +43,7 @@ class NgestService(ConfiguredLegacyApi):
         self,
         feed_key: str,
         feed_token: str,
-        time_series: Dict[str, Dict[datetime, float]],
+        time_series: Dict[str, Dict[datetime, Any]],
         per_request: int = 50,
     ) -> List[Dict]:
         """Sends time series data for field(s).
