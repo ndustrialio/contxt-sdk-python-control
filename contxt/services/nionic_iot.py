@@ -76,7 +76,7 @@ class IotNionicHelper(BaseGraphService):
 
         return result_data
 
-    def get_bulk_iot_data(self, requests: List[IOTRequest]) -> Dict[str, pd.Series]:
+    def execute_bulk_request(self, requests: List[IOTRequest]) -> (Dict[str, pd.Series], Dict[str, bool]):
         op = Operation(schema.Query)
 
         req_aliases = []
@@ -85,7 +85,8 @@ class IotNionicHelper(BaseGraphService):
             alias = req.alias.replace('-', '_')
             req_aliases.append(alias)
             if req.window is not MetricWindow.RAW:
-                metric_data = op.metric_data(label=req.field.label, source_id=req.field.sourceId, window=req.window.value,
+                metric_data = op.metric_data(label=req.field.label, source_id=req.field.sourceId,
+                                             window=req.window.value,
                                              aggregation=req.aggregation,
                                              order_by=schema.MetricDataOrderBy.TIME_ASC,
                                              to=str(req.endTime), from_=str(req.startTime),
@@ -106,14 +107,60 @@ class IotNionicHelper(BaseGraphService):
         metric_data = (op + data)
 
         result_data = {}
+        finished_status = {}
         for alias in req_aliases:
             res = metric_data[alias]
 
             parsed_data, time_index = self._page_through_response(res)
 
             result_data[alias] = pd.Series(parsed_data, time_index)
+            finished_status[alias] = res.page_info.has_next_page
 
-        return result_data
+        return result_data, finished_status
+
+    def get_bulk_iot_data(self, requests: List[IOTRequest]) -> Dict[str, pd.Series]:
+
+        original_requests = {}
+
+        # keep a map of original aliases so after we clean them for the API call, we can return them unaltered
+        original_alias_map = {}
+        for req in requests:
+            alias = req.alias.replace('-', '_')
+            original_alias_map[alias] = req.alias
+            original_requests[alias] = req
+
+        all_paged_data: Dict[str, pd.Series] = {}
+        active_requests = requests
+
+        while True:
+            print(f'Making bulk IOT request for {len(active_requests)} requests:')
+            print([req.alias for req in active_requests])
+
+            # take the requests and execute them
+            data, status = self.execute_bulk_request(active_requests)
+
+            active_requests = []
+            for alias, pd_series in data.items():
+                original_alias = original_alias_map.get(alias)
+                if original_alias not in all_paged_data:
+                    all_paged_data[original_alias] = pd.Series(dtype='object')
+
+                all_paged_data[original_alias] = pd.concat([all_paged_data[original_alias], pd_series])
+
+                # check to see if there are any "unfinished" requests that need to have subsequent calls made
+                has_more_pages = status[alias]
+                if has_more_pages:
+                    orig_request = original_requests.get(alias)
+                    # if so, update the start_time and re-fire the requests until they're all done
+                    last_point = pd_series.index[-1] + timedelta(minutes=1)
+                    orig_request.startTime = last_point
+                    active_requests.append(orig_request)
+
+            # if there are no more requests, break out of this loop
+            if not len(active_requests):
+                break
+
+        return all_paged_data
 
     def get_iot_data(self, field: MetricField, start_time: datetime, end_time: datetime,
                      window: MetricWindow = MetricWindow.MINUTELY, order_by=schema.MetricDataOrderBy.TIME_ASC,
