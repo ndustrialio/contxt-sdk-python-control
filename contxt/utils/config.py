@@ -3,6 +3,7 @@ import yaml
 from datetime import datetime
 from yaml import load, SafeLoader, YAMLError, safe_dump
 from marshmallow_dataclass import class_schema
+from marshmallow import EXCLUDE, INCLUDE
 import numpy as np
 import logging
 
@@ -33,16 +34,23 @@ class BucketValue:
     min: float
     label: str
 
+@dataclass
+class ReportUnits(Enum):
+    mwh = 'mwh'
+    kwh = 'kwh'
+
 
 @dataclass
 class SuggestionLevel(Enum):
     WARNING = 'Warning'
+    ELEVATED_WARNING = 'Elevated Warning'
     ALERTING = 'Alert'
 
 
 @dataclass
 class BucketedStateConfig:
     buckets: List[BucketValue]
+    units: ReportUnits
 
     def __post_init__(self):
         self.series = self._bucket_series()
@@ -61,6 +69,13 @@ class BucketedStateConfig:
 
     def _bucket_labels(self) -> List[str]:
         return [b.label for b in self.buckets]
+
+    def get_bucket_with_level(self, level: SuggestionLevel) -> Optional[BucketValue]:
+        for bucket in self.buckets:
+            if bucket.label == level.value:
+                return bucket
+        return None
+
 
 
 @dataclass
@@ -89,12 +104,6 @@ class IOTFetchConfig:
     def to_metric_field(self):
         return MetricField(label=self.fieldDescriptor,
                            sourceId=self.feedKey)
-
-
-@dataclass
-class ReportUnits(Enum):
-    mwh = 'mwh'
-    kwh = 'kwh'
 
 
 @dataclass
@@ -440,6 +449,8 @@ def load_config_class_from_file(file: str, config_class):
     return result
 
 
-def load_config_class_from_object(object: Dict[Any, Any], config_class):
+def load_config_class_from_object(object: Dict[Any, Any], config_class, exclude_unknowns: bool = False):
     config_schema = class_schema(config_class)
+    if exclude_unknowns:
+        return config_schema().load(object, unknown=EXCLUDE)
     return config_schema().load(object)
